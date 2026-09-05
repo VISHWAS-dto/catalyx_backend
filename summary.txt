@@ -1,7 +1,5 @@
 CATALYX BACKEND — SIMPLE SUMMARY
 ==================================
-(In plain, easy words — what we built so far, phase by phase)
-
 WHAT IS THIS PROJECT?
 ----------------------
 Catalyx is a backend server (built with Java + Spring Boot) for an app where
