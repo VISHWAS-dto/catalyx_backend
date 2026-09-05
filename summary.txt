@@ -90,12 +90,51 @@ In short: Phase 4 = "let a logged-in user create and view their own
 business profile."
 
 
+PHASE 5 — PRODUCT MANAGEMENT (Add Products + Upload Photos)
+---------------------------------------------------------------
+Now that a user can log in and set up their business, this phase lets them
+add products to that business, along with photos of each product.
+
+What we did:
+- Built a "Create Product" API (POST /products): a logged-in user can add
+  a new product under their business by giving a name, SKU (product
+  code), price, and description.
+- Along with the product details, the user can also upload one or more
+  photos of the product in the SAME request (this is called a
+  "multipart" request — a mix of text fields and file uploads together).
+- Built a "Get Products" API (GET /products): a logged-in user can fetch
+  the full list of their business's products, each with its photos
+  included.
+- Added a new helper, FileStorageService, whose only job is handling
+  uploaded photos safely:
+    - Rejects empty files.
+    - Only allows real image files (JPEG, PNG, GIF, WEBP) — blocks
+      anything else (like a disguised .exe file) from being uploaded.
+    - Rejects any single photo bigger than 5MB.
+    - Saves each accepted photo to a folder on disk organized by product
+      (uploads/products/<productId>/), with a random, unique file name
+      so two different people's uploads never overwrite each other.
+- Every uploaded photo becomes its own row in the ProductImage table
+  (already designed back in Phase 1), linked to the product it belongs to.
+- Added server-wide limits: no single uploaded file over 5MB, and no
+  request (all files combined) over 25MB — if someone tries to break
+  this, the app now replies with a clean error message ("Uploaded file(s)
+  exceed the maximum allowed size") instead of crashing.
+- A product can only be created under the business that belongs to the
+  logged-in user — same ownership protection pattern as Phase 4's
+  business rule.
+- Small supporting change: added one query that fetches a business's
+  products AND their photos together in a single efficient database
+  call, instead of needing separate lookups.
+
+In short: Phase 5 = "let a logged-in user add products to their business,
+with photo uploads, safely validated and stored."
+
+
 WHAT'S NOT BUILT YET (for context)
 -------------------------------------
 Looking at the database design (entities) already created in Phase 1, the
 following are prepared for but not yet built with actual APIs:
-- Product management (add/edit products for a business)
-- Product images (upload photos for products)
 - Catalogue generation (creating a shareable catalogue/brochure)
 - AI Jobs (background AI tasks, e.g. auto-generating catalogue designs,
   with a status: PENDING, PROCESSING, DONE, FAILED)
@@ -107,6 +146,7 @@ phases to use.
 QUICK RECAP TABLE
 --------------------
 Phase 1        -> Set up project + database + skeleton folders + tables
-Phase 2/3       -> Signup, Login, JWT tokens, password security
+Phase 2/3      -> Signup, Login, JWT tokens, password security
 Phase 4        -> Create & view a business profile (one per user)
-Not built yet  -> Products, product images, catalogues, AI jobs
+Phase 5        -> Add products + upload product photos (with validation)
+Not built yet  -> Catalogues, AI jobs
