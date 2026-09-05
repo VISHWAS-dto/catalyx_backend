@@ -1,0 +1,114 @@
+CATALYX BACKEND — SIMPLE SUMMARY
+==================================
+(In plain, easy words — what we built so far, phase by phase)
+
+WHAT IS THIS PROJECT?
+----------------------
+Catalyx is a backend server (built with Java + Spring Boot) for an app where
+a business owner can sign up, log in, and set up their business profile.
+Later phases (not built yet) will let them add products and use AI to
+generate a catalogue for their business.
+
+Think of it like the "engine room" of the app — it has no visual screens,
+just the logic and database that a mobile/web app would talk to over the
+internet using API calls (like /signup, /login, /business).
+
+
+PHASE 1 — PROJECT SETUP AND ENVIRONMENT
+-----------------------------------------
+This phase was about laying the foundation, before writing any real feature.
+
+What we did:
+- Created a new Spring Boot project called "catalyx-backend" using Java 17.
+- Set up the project to talk to a PostgreSQL database (a place to store data
+  permanently, like users, businesses, products).
+- Added the basic building blocks (folders) for how the code will be
+  organized: config, controller, dto, entity, repository, security, service.
+  (Explained in detail in architecture.txt)
+- Created the 6 main "entities" — these are the tables in our database:
+  User, Business, Product, ProductImage, Catalogue, AiJob.
+  These represent the real-world things our app manages.
+- Created "repository" files for each entity — these are helper classes
+  that let our code save/fetch/delete data from the database without
+  writing raw SQL by hand.
+- Wrote the application settings file (application.properties) that tells
+  the app which database to connect to.
+
+In short: Phase 1 = "build the skeleton and connect to the database."
+
+
+PHASE 2 & 3 — AUTHENTICATION & JWT (Login System)
+----------------------------------------------------
+(This was committed as one combined phase called "Authentication & JWT")
+
+This phase is about letting users create an account and log in safely.
+
+What we did:
+- Built a Signup API (/signup): a new user gives their name, email, and
+  password, and we create their account. The password is never stored as
+  plain text — it's scrambled using a one-way encryption method called
+  BCrypt, so even we can't see the real password.
+- Built a Login API (/login): user enters email + password, and if correct,
+  we give them back a "token" — a digital pass (like a wristband at an
+  event) that proves who they are.
+- This digital pass is called a JWT (JSON Web Token). It's a small piece of
+  text that:
+    - Contains the user's identity (email, user ID)
+    - Has an expiry (24 hours by default)
+    - Is signed/sealed with a secret key so nobody can fake or edit it
+- Every time the user calls another API (like creating a business), they
+  attach this token in the request. Our server checks the token to confirm
+  "yes, this is really this user" before allowing the action — this is
+  called being "authenticated."
+- If someone provides a wrong password, an invalid token, or no token at
+  all when required, we return a clean, readable error message (not a
+  scary server crash) — for example "Invalid email or password."
+- We also added Spring Security — a security guard system that decides
+  which pages/APIs are public (like /signup, /login) and which ones
+  require you to be logged in (everything else).
+
+In short: Phase 2/3 = "let people create accounts, log in safely, and
+protect the rest of the app so only logged-in users can use it."
+
+
+PHASE 4 — BUSINESS SETUP MODULE
+-----------------------------------
+Now that users can log in, this phase lets them set up their business.
+
+What we did:
+- Built a "Create Business" API (POST /business): a logged-in user can
+  register their business by giving a name, category (e.g. "Bakery",
+  "Clothing"), logo image link, and brand colors.
+- Built a "Get Business" API (GET /business): a logged-in user can fetch
+  their own business details.
+- Rule: each user can only have ONE business. If they try to create a
+  second one, the app blocks it with a clear error ("A business already
+  exists for this user").
+- The business is always linked to the exact user who is logged in — we
+  use their token to know who they are, so nobody can create or see
+  another person's business.
+
+In short: Phase 4 = "let a logged-in user create and view their own
+business profile."
+
+
+WHAT'S NOT BUILT YET (for context)
+-------------------------------------
+Looking at the database design (entities) already created in Phase 1, the
+following are prepared for but not yet built with actual APIs:
+- Product management (add/edit products for a business)
+- Product images (upload photos for products)
+- Catalogue generation (creating a shareable catalogue/brochure)
+- AI Jobs (background AI tasks, e.g. auto-generating catalogue designs,
+  with a status: PENDING, PROCESSING, DONE, FAILED)
+
+These tables already exist in the database structure, ready for future
+phases to use.
+
+
+QUICK RECAP TABLE
+--------------------
+Phase 1        -> Set up project + database + skeleton folders + tables
+Phase 2/3       -> Signup, Login, JWT tokens, password security
+Phase 4        -> Create & view a business profile (one per user)
+Not built yet  -> Products, product images, catalogues, AI jobs

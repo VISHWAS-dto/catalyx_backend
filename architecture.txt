@@ -1,0 +1,409 @@
+CATALYX BACKEND — ARCHITECTURE (FILE BY FILE)
+================================================
+This explains HOW the project is structured, WHY each file/folder exists,
+and WHAT is inside it. Written in simple language.
+
+TECH STACK USED
+------------------
+- Java 17
+- Spring Boot 4.0.8 (the framework that wires everything together)
+- Spring Data JPA (talks to the database without writing raw SQL)
+- Spring Security (login/authentication/authorization guard)
+- PostgreSQL (the actual database)
+- JJWT library (creates and reads JWT login tokens)
+- Lombok (auto-generates boilerplate Java code like getters/setters)
+- Maven (the tool that downloads libraries and builds/runs the project)
+
+
+HIGH-LEVEL FLOW (how a request travels through the app)
+-----------------------------------------------------------
+  Client (app/browser)
+        |
+        v
+  JwtAuthenticationFilter   <- checks the JWT token on every request
+        |
+        v
+  Controller (e.g. AuthController, BusinessController)  <- receives the API call
+        |
+        v
+  Service (e.g. AuthService, BusinessService)  <- contains the business logic/rules
+        |
+        v
+  Repository (e.g. UserRepository, BusinessRepository)  <- talks to the database
+        |
+        v
+  Entity (e.g. User, Business)  <- represents a table/row in the database
+        |
+        v
+  PostgreSQL database
+
+DTOs (Data Transfer Objects) are the "shape" of data going in and out of
+the API (what the client sends us, what we send back) — they are kept
+separate from Entities so we never accidentally expose database-only
+fields (like password) to the outside world.
+
+
+FOLDER STRUCTURE (why organized this way)
+----------------------------------------------
+catalyx-backend/
+  pom.xml                        -> Maven's shopping list of libraries + build config
+  src/main/resources/
+    application.properties       -> App settings (DB connection, JWT secret, etc.)
+  src/main/java/com/catalyx/backend/
+    CatalyxBackendApplication.java  -> the "start button" of the whole app
+    config/        -> app-wide configuration (security rules, error handling)
+    controller/    -> the "front door" — defines API endpoints (URLs)
+    dto/           -> request/response data shapes (what goes over the wire)
+    entity/        -> database table definitions
+    repository/    -> database access helpers (save/find/delete)
+    security/      -> login/JWT/authentication machinery
+    service/       -> the actual business logic/rules
+
+This is a standard "layered architecture" — each folder has ONE job, so the
+code is easy to find and change later. For example, if we ever swap
+PostgreSQL for another database, only the repository/entity layers are
+affected — the controllers and DTOs will not need to change.
+
+
+=====================================================================
+ROOT / CONFIG FILES
+=====================================================================
+
+pom.xml
+-------
+This is Maven's project definition file. It lists:
+- Java version to use (17)
+- Every external library the project depends on, e.g.:
+    spring-boot-starter-data-jpa   -> database access
+    spring-boot-starter-security   -> login/authentication
+    spring-boot-starter-validation -> checks incoming data is valid
+    spring-boot-starter-webmvc     -> lets the app respond to web requests
+    postgresql                     -> driver to connect to PostgreSQL
+    jjwt-api / jjwt-impl / jjwt-jackson -> create & verify JWT tokens
+    lombok                         -> auto-generates repetitive Java code
+- Build instructions or how to package/run the app.
+Why it exists: Without this file, Maven wouldn't know what to download or
+how to compile the project.
+
+application.properties
+------------------------
+The app's settings file, read automatically on startup. Contains:
+- Which database to connect to (localhost PostgreSQL, database "catalyx_db")
+- Database username/password
+- Hibernate/JPA settings (auto-update table structure, show SQL logs)
+- JWT secret key and token expiry time (24 hours), pulled from environment
+  variables if set, otherwise falls back to dev defaults.
+Why it exists: keeps configuration separate from code, so we can change
+settings (like DB password) without touching Java files.
+
+mvnw / mvnw.cmd / .mvn/wrapper/maven-wrapper.properties
+-----------------------------------------------------------
+The "Maven Wrapper" — lets anyone run the project using ./mvnw even if they
+don't have Maven installed on their machine. Standard Spring Boot boilerplate.
+
+.gitignore / .gitattributes
+------------------------------
+Tells Git which files to ignore (like the compiled "target" folder) and how
+to handle line endings. Keeps the Git repository clean.
+
+
+=====================================================================
+src/main/java/com/catalyx/backend/CatalyxBackendApplication.java
+=====================================================================
+The entry point of the entire application — the "main" method that starts
+everything. Running this file boots up the whole Spring Boot server.
+Why it exists: every Spring Boot app needs exactly one of these to launch.
+
+
+=====================================================================
+entity/  — THE DATABASE TABLES
+=====================================================================
+Each file here represents one table in the database. Spring automatically
+creates/updates these tables based on these classes (thanks to
+`spring.jpa.hibernate.ddl-auto=update` in application.properties).
+
+User.java
+---------
+Represents a registered user/account.
+Fields: id, email (unique), password (encrypted, never plain text), name,
+createdAt, and a list of businesses they own.
+Why: every person using the app needs an account to log in.
+
+Business.java
+-------------
+Represents one business profile, owned by exactly one User.
+Fields: id, user (who owns it), name, category, logoUrl, brandColors,
+createdAt, plus lists of products and catalogues under this business.
+Why: the app's core idea is that each user runs a business — this stores
+that business's identity/branding info.
+
+Product.java
+------------
+Represents one product that a business sells.
+Fields: id, business (owner), name, sku (product code), price, description,
+createdAt, plus lists of images and AI jobs related to this product.
+Why: prepared so businesses can eventually list their products (Phase 5+,
+not built yet).
+
+ProductImage.java
+------------------
+Represents one photo uploaded for a product.
+Fields: id, product (which product it belongs to), imageUrl, uploadedAt.
+Why: a product can have multiple images; this table stores each one
+separately, linked back to its product.
+
+Catalogue.java
+---------------
+Represents a generated catalogue/brochure document for a business.
+Fields: id, aiJob (which AI job created it), business (owner), templateName,
+contentUrl (where the generated file lives), createdAt.
+Why: prepared for the future feature where AI generates a shareable
+catalogue for a business.
+
+AiJob.java
+-----------
+Represents a background AI task (e.g. "generate a catalogue design").
+Fields: id, product (related product), status (PENDING/PROCESSING/DONE/
+FAILED), createdAt, updatedAt, plus the catalogues it produces.
+Why: AI generation takes time, so it's tracked as a "job" with a status,
+rather than happening instantly — this table lets the app check progress.
+
+AiJobStatus.java
+------------------
+A simple enum (fixed list of values): PENDING, PROCESSING, DONE, FAILED.
+Why: keeps the AiJob's status field restricted to only these 4 valid
+values, instead of allowing any random text.
+
+Note on entity design: Every entity uses Lombok annotations (@Data,
+@Builder, etc.) to avoid manually writing getters/setters/constructors, and
+@PrePersist methods to automatically stamp createdAt/updatedAt timestamps
+when a row is first saved.
+
+
+=====================================================================
+repository/  — DATABASE ACCESS LAYER
+=====================================================================
+Each interface here extends JpaRepository, which automatically gives us
+methods like save(), findById(), delete(), findAll() for free — no SQL
+needed. We only add extra custom lookup methods when needed.
+
+UserRepository.java     -> findByEmail(), existsByEmail()
+                            Why: needed at login/signup to check if an
+                            email is already taken, and to look up a user
+                            by their email.
+
+BusinessRepository.java -> findByUserId()
+                            Why: needed to check/find the one business
+                            belonging to a specific user.
+
+ProductRepository.java  -> findByBusinessId()
+                            Why: to list all products under a business
+                            (for future product features).
+
+ProductImageRepository.java -> findByProductId()
+                            Why: to list all images under a specific
+                            product (for future features).
+
+CatalogueRepository.java -> findByBusinessId(), findByAiJobId()
+                            Why: to fetch catalogues belonging to a
+                            business, or produced by a specific AI job.
+
+AiJobRepository.java     -> findByProductId(), findByStatus()
+                            Why: to check AI job progress for a product,
+                            or list all jobs currently PENDING/PROCESSING.
+
+Why this layer exists at all: separates "how we store data" from "what the
+data means" — the rest of the app just calls simple methods like
+userRepository.findByEmail(...) without knowing/caring about SQL.
+
+
+=====================================================================
+dto/  — REQUEST & RESPONSE SHAPES
+=====================================================================
+DTOs define exactly what data comes IN from the client and what goes OUT
+as a response. They are plain, safe wrappers — never expose sensitive
+fields like passwords.
+
+SignupRequest.java  -> what a new user sends to /signup: email, password
+                        (min 8 characters), name. All fields are validated
+                        automatically (e.g. rejects blank/invalid email).
+
+LoginRequest.java   -> what a user sends to /login: email, password.
+
+AuthResponse.java   -> what we send back after signup/login: the JWT
+                        token, tokenType ("Bearer"), userId, email, name.
+                        Never includes the password.
+
+BusinessRequest.java -> what's sent to create a business: name (required),
+                        category, logoUrl, brandColors.
+
+BusinessResponse.java -> what's sent back for a business: id, userId, name,
+                        category, logoUrl, brandColors, createdAt. Includes
+                        a helper `from(Business)` method that converts a
+                        database Business entity into this safe response
+                        shape.
+
+ErrorResponse.java  -> a consistent shape for ALL error messages returned
+                        by the app: timestamp, status code, error type,
+                        message, and the API path that failed. Ensures
+                        every error looks the same, making it easy for the
+                        frontend to handle errors predictably.
+
+Why DTOs exist as separate files from entities: if we returned the User
+entity directly from an API, the password field (even encrypted) could
+leak out. DTOs act as a filter/shield between the database and the
+outside world.
+
+
+=====================================================================
+security/  — LOGIN & TOKEN MACHINERY
+=====================================================================
+
+JwtUtil.java
+-------------
+The token factory. Responsible for:
+- generateToken(email, userId): creates a new signed JWT after login/signup
+- extractEmail(token) / extractUserId(token): reads info out of a token
+- isTokenValid(token): checks a token hasn't been tampered with or expired
+Uses the secret key from application.properties to sign/verify tokens, so
+only our server can create valid tokens.
+
+JwtAuthenticationFilter.java
+-------------------------------
+Runs on EVERY incoming request (before it reaches any controller). It:
+1. Looks for an "Authorization: Bearer <token>" header.
+2. If present, validates the token using JwtUtil.
+3. If valid, tells Spring Security "this request belongs to this user" so
+   the rest of the app treats it as logged-in.
+4. If the token is broken/expired, immediately returns a 401 Unauthorized
+   error with a clean JSON message instead of letting the request through.
+Why: this is what makes "protected" APIs actually protected — without this
+filter, tokens would be ignored.
+
+AppUserDetailsService.java
+------------------------------
+A bridge between Spring Security and our database. When Spring Security
+needs to check "does this user exist / what's their password hash", it
+calls loadUserByUsername(email) here, which looks the user up via
+UserRepository and wraps them in an AppUserPrincipal.
+
+AppUserPrincipal.java
+------------------------
+A wrapper around our User entity that Spring Security understands
+(implements its UserDetails interface). Exposes id, email, password, name
+in the format Spring Security expects, so it can perform login checks.
+
+JwtAuthenticationEntryPoint.java
+------------------------------------
+Handles what happens when someone tries to access a protected API WITHOUT
+being logged in at all (no token given). Returns a clean 401 error message
+("Authentication is required to access this resource") instead of a
+generic/ugly server error.
+
+
+=====================================================================
+config/  — APP-WIDE RULES
+=====================================================================
+
+SecurityConfig.java
+-----------------------
+The master security rulebook. Defines:
+- PasswordEncoder bean: uses BCrypt to scramble passwords before saving.
+- DaoAuthenticationProvider: tells Spring Security how to verify a login
+  (using our AppUserDetailsService + password encoder).
+- AuthenticationManager: the object services use to actually perform a
+  login check.
+- SecurityFilterChain: the actual rulebook —
+    - Disables CSRF (not needed since we use stateless JWT, not cookies/sessions)
+    - Sets session policy to STATELESS (server doesn't remember logged-in
+      state between requests — every request must carry its own token)
+    - Allows /signup and /login without a token (public)
+    - Requires a valid token for every other API
+    - Plugs in JwtAuthenticationFilter to run before Spring's normal login filter
+    - Uses JwtAuthenticationEntryPoint to handle unauthorized access attempts
+Why: this is the single place that decides "what's public vs. what needs login."
+
+GlobalExceptionHandler.java
+--------------------------------
+Catches errors that happen anywhere in the app and turns them into clean,
+consistent JSON responses (using ErrorResponse) instead of raw Java stack
+traces. Handles:
+- Validation errors (e.g. missing/invalid signup fields) -> 400 Bad Request
+- Bad login credentials -> 401 Unauthorized
+- Any other deliberately-thrown error (like "business already exists") ->
+  whatever status code was specified
+Why: makes the API predictable and safe — the client never sees a scary
+Java error, always a clean JSON message.
+
+
+=====================================================================
+controller/  — THE API ENDPOINTS (FRONT DOOR)
+=====================================================================
+
+AuthController.java
+------------------------
+Defines the public-facing signup/login URLs:
+- POST /signup  -> calls AuthService.signup(), returns 201 Created + token
+- POST /login   -> calls AuthService.login(), returns 200 OK + token
+This is the ONLY place that knows about HTTP details (status codes, URLs);
+it delegates all actual logic to AuthService.
+
+BusinessController.java
+----------------------------
+Defines the business-related URLs (all require login):
+- POST /business -> calls BusinessService.createBusiness(), returns 201
+- GET  /business  -> calls BusinessService.getBusiness(), returns 200
+Uses @AuthenticationPrincipal to automatically get the currently logged-in
+user (from the JWT token) without the client having to send their user ID
+manually — this prevents one user from faking another user's ID.
+
+
+=====================================================================
+service/  — BUSINESS LOGIC / RULES
+=====================================================================
+
+AuthService.java
+--------------------
+Contains the actual rules for signup and login:
+- signup(): checks email isn't already used, encrypts the password, saves
+  the new User, generates a JWT, returns it.
+- login(): verifies email+password via Spring Security's
+  AuthenticationManager, and if correct, generates and returns a fresh JWT.
+Why separated from the controller: keeps HTTP-handling code (controller)
+separate from actual business rules (service), so rules can be reused/
+tested independently of the web layer.
+
+BusinessService.java
+-------------------------
+Contains the rules for business setup:
+- createBusiness(): checks the user doesn't already have a business (one
+  business per user rule), links the new Business to the logged-in User,
+  saves it.
+- getBusiness(): fetches the business belonging to the logged-in user, or
+  returns a clean 404 error if they haven't created one yet.
+
+
+=====================================================================
+src/test/java/.../CatalyxBackendApplicationTests.java
+=====================================================================
+A basic Spring Boot test that just checks the whole application "context"
+starts up correctly (all beans/configuration wire together without
+errors). It's the default test Spring Boot generates — a sanity check,
+not a feature test.
+
+
+=====================================================================
+WHY THIS ARCHITECTURE (SUMMARY)
+=====================================================================
+- Layered design (controller -> service -> repository -> entity) keeps
+  each piece focused on one job, making the code easier to understand,
+  test, and change later.
+- DTOs protect the database structure from being directly exposed to the
+  internet.
+- JWT + Spring Security means the server doesn't need to "remember" who's
+  logged in (no server-side sessions) — each request proves itself with a
+  token, which scales better and is simpler to run on multiple servers.
+- Entities for Product, ProductImage, Catalogue, and AiJob already exist
+  in the database design, even though their APIs aren't built yet — this
+  was intentional groundwork so future phases (product management, AI
+  catalogue generation) can be added without redesigning the database.
